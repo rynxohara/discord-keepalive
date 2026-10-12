@@ -21,6 +21,25 @@ app.listen(PORT, () => {
 let ws;
 let heartbeatInterval;
 let sequence = null;
+let currentUserId = null;
+let rejoinTimeout = null;
+
+function joinVoice() {
+  if (ws && ws.readyState === WebSocket.OPEN && GUILD_ID && VOICE_CHANNEL_ID) {
+    ws.send(
+      JSON.stringify({
+        op: 4,
+        d: {
+          guild_id: GUILD_ID,
+          channel_id: VOICE_CHANNEL_ID,
+          self_mute: true,
+          self_deaf: true,
+        },
+      })
+    );
+    console.log('🔊 Joined Voice Channel 24/7!');
+  }
+}
 
 function connectGateway() {
   if (!TOKEN) {
@@ -75,21 +94,19 @@ function connectGateway() {
     }
 
     if (t === 'READY') {
+      currentUserId = d.user.id;
       console.log(`✅ Connected as: ${d.user.username}`);
+      joinVoice();
+    }
 
-      if (GUILD_ID && VOICE_CHANNEL_ID) {
-        ws.send(
-          JSON.stringify({
-            op: 4,
-            d: {
-              guild_id: GUILD_ID,
-              channel_id: VOICE_CHANNEL_ID,
-              self_mute: true,
-              self_deaf: true,
-            },
-          })
-        );
-        console.log('🔊 Joined Voice Channel 24/7!');
+    // إلا شي واحد خرجك من الروم (Disconnect) أو حولك لروم آخر، يرجع أوتوماتيكياً بعد 3 ثواني
+    if (t === 'VOICE_STATE_UPDATE' && currentUserId && d.user_id === currentUserId) {
+      if (GUILD_ID && VOICE_CHANNEL_ID && d.channel_id !== VOICE_CHANNEL_ID) {
+        console.log('⚠️ Someone disconnected/moved the account from voice! Rejoining in 3s...');
+        clearTimeout(rejoinTimeout);
+        rejoinTimeout = setTimeout(() => {
+          joinVoice();
+        }, 3000);
       }
     }
   });
